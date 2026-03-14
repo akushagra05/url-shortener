@@ -229,6 +229,28 @@ url-shortener/
 
 ---
 
+## 📸 Screenshots
+
+### Homepage & URL Creation
+![Homepage](docs/screenshots/Homepage_and_URL_creation.png)
+
+### URL List
+![URL List](docs/screenshots/URL_List.png)
+
+### URL Creation with Expiry
+![URL with Expiry](docs/screenshots/URL_creation_with_expiry.png)
+
+### Analytics Dashboard
+![Analytics](docs/screenshots/Analytics.png)
+
+### Redis Cache
+![Redis Cache](docs/screenshots/Redis_cache.png)
+
+### Database Table
+![Database](docs/screenshots/DB_TABLE.png)
+
+---
+
 ## 📚 Documentation
 
 <table>
