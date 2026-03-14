@@ -15,11 +15,6 @@ services:
         fromDatabase:
           name: url-shortener-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: url-shortener-redis
-          type: redis
-          property: connectionString
       - key: RATE_LIMIT_ENABLED
         value: true
       - key: RATE_LIMIT_REQUESTS_PER_MINUTE
@@ -34,8 +29,4 @@ databases:
   - name: url-shortener-db
     databaseName: urlshortener
     user: urlshortener
-
-  - name: url-shortener-redis
-    type: redis
     plan: free
-    maxmemoryPolicy: allkeys-lru
