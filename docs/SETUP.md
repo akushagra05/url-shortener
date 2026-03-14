@@ -20,10 +20,10 @@ docker-compose up -d
 ## Manual Setup (Local Development)
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.25+
 - Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
+- PostgreSQL 17+
+- Redis 8.2+
 
 ### Backend Setup
 
@@ -59,8 +59,8 @@ SNOWFLAKE_MACHINE_ID=1
 **Start PostgreSQL & Redis:**
 ```bash
 # Option 1: Docker
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:15-alpine
-docker run -d -p 6379:6379 redis:7-alpine
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:17-alpine
+docker run -d -p 6379:6379 redis:8-alpine
 
 # Option 2: Homebrew (Mac)
 brew install postgresql redis
