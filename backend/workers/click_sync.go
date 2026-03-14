@@ -36,18 +36,34 @@ func syncClickCounts() error {
 
 	log.Printf("Syncing %d click counters to database", len(counters))
 
-	// Update each URL's click count in the database
+	// Update each URL's click count and last_accessed_at in the database
+	shortCodes := make([]string, 0, len(counters))
 	for shortCode, count := range counters {
 		if count > 0 {
-			if err := database.UpdateClickCount(shortCode, count); err != nil {
+			// Get last access time from Redis
+			lastAccessTime, err := cache.GetLastAccessTime(shortCode)
+			if err != nil {
+				log.Printf("Failed to get last access time for %s: %v", shortCode, err)
+				continue
+			}
+			
+			// If no timestamp in Redis, use current time
+			if lastAccessTime == nil {
+				now := time.Now()
+				lastAccessTime = &now
+			}
+			
+			// Update DB with count and actual last access time
+			if err := database.UpdateClickCount(shortCode, count, *lastAccessTime); err != nil {
 				log.Printf("Failed to update click count for %s: %v", shortCode, err)
 				continue
 			}
+			shortCodes = append(shortCodes, shortCode)
 		}
 	}
 
 	// Clear the Redis counters after successful sync
-	if err := cache.FlushClickCounters(); err != nil {
+	if err := cache.FlushClickCounters(shortCodes); err != nil {
 		log.Printf("Failed to flush click counters: %v", err)
 		return err
 	}

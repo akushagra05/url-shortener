@@ -1,3 +1,4 @@
+
 package cache
 
 import (
@@ -9,7 +10,6 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/yourusername/url-shortener/config"
-	"github.com/yourusername/url-shortener/models"
 )
 
 var (
@@ -45,53 +45,22 @@ func CloseRedis() error {
 
 // Cache key patterns
 const (
-	URLCacheKeyPrefix      = "url:"
-	ClickCounterKeyPrefix  = "clicks:"
-	RateLimitKeyPrefix     = "ratelimit:"
+	ClickCounterKeyPrefix = "clicks:"
+	RateLimitKeyPrefix    = "ratelimit:"
 )
 
-// GetCachedURL retrieves a URL from cache
-func GetCachedURL(shortCode string) (*models.CachedURL, error) {
-	key := URLCacheKeyPrefix + shortCode
-	
-	val, err := Client.Get(ctx, key).Result()
-	if err == redis.Nil {
-		return nil, nil // Cache miss
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	var cachedURL models.CachedURL
-	if err := json.Unmarshal([]byte(val), &cachedURL); err != nil {
-		return nil, err
-	}
-
-	return &cachedURL, nil
-}
-
-// SetCachedURL stores a URL in cache
-func SetCachedURL(shortCode string, cachedURL *models.CachedURL, ttl time.Duration) error {
-	key := URLCacheKeyPrefix + shortCode
-	
-	data, err := json.Marshal(cachedURL)
-	if err != nil {
-		return err
-	}
-
-	return Client.Set(ctx, key, data, ttl).Err()
-}
-
-// DeleteCachedURL removes a URL from cache
-func DeleteCachedURL(shortCode string) error {
-	key := URLCacheKeyPrefix + shortCode
-	return Client.Del(ctx, key).Err()
-}
-
-// IncrementClickCount increments the click counter in Redis
+// IncrementClickCount increments the click counter and updates last access time in Redis
 func IncrementClickCount(shortCode string) error {
 	key := ClickCounterKeyPrefix + shortCode
-	return Client.Incr(ctx, key).Err()
+	lastAccessKey := "last_access:" + shortCode
+	
+	// Pipeline for atomic operations
+	pipe := Client.Pipeline()
+	pipe.Incr(ctx, key)
+	pipe.Set(ctx, lastAccessKey, time.Now().Unix(), 0)  // Store timestamp
+	_, err := pipe.Exec(ctx)
+	
+	return err
 }
 
 // GetClickCount retrieves the current click count from Redis
@@ -111,139 +80,153 @@ func GetClickCount(shortCode string) (int64, error) {
 	return count, nil
 }
 
+// GetLastAccessTime retrieves the last access timestamp from Redis
+func GetLastAccessTime(shortCode string) (*time.Time, error) {
+	key := "last_access:" + shortCode
+	
+	val, err := Client.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return nil, nil // No access recorded
+	}
+	if err != nil {
+		return nil, err
+	}
+	
+	var timestamp int64
+	fmt.Sscanf(val, "%d", &timestamp)
+	t := time.Unix(timestamp, 0)
+	return &t, nil
+}
+
 // ResetClickCount resets the click counter to 0
 func ResetClickCount(shortCode string) error {
 	key := ClickCounterKeyPrefix + shortCode
 	return Client.Set(ctx, key, 0, 0).Err()
 }
 
-// DeleteClickCount removes the click counter
-func DeleteClickCount(shortCode string) error {
-	key := ClickCounterKeyPrefix + shortCode
+// URL caching with TTL refresh on access
+const (
+	URLCacheKeyPrefix = "url:"
+	URLCacheTTL       = 24 * time.Hour
+)
+
+// URLCacheData represents cached URL data
+type URLCacheData struct {
+	OriginalURL string     `json:"original_url"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	IsActive    bool       `json:"is_active"`
+}
+
+// SetCachedURL stores URL in Redis with 24hr TTL
+func SetCachedURL(shortCode string, originalURL string, expiresAt *time.Time, isActive bool) error {
+	key := URLCacheKeyPrefix + shortCode
+	data := URLCacheData{
+		OriginalURL: originalURL,
+		ExpiresAt:   expiresAt,
+		IsActive:    isActive,
+	}
+	
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	
+	return Client.Set(ctx, key, jsonData, URLCacheTTL).Err()
+}
+
+// GetCachedURL retrieves URL from cache and refreshes TTL
+func GetCachedURL(shortCode string) (*URLCacheData, error) {
+	key := URLCacheKeyPrefix + shortCode
+	
+	val, err := Client.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return nil, nil // Cache miss
+	}
+	if err != nil {
+		return nil, err
+	}
+	
+	var data URLCacheData
+	if err := json.Unmarshal([]byte(val), &data); err != nil {
+		return nil, err
+	}
+	
+	// Refresh TTL on access (keeps hot URLs cached)
+	go Client.Expire(ctx, key, URLCacheTTL)
+	
+	return &data, nil
+}
+
+// DeleteCachedURL removes URL from cache
+func DeleteCachedURL(shortCode string) error {
+	key := URLCacheKeyPrefix + shortCode
 	return Client.Del(ctx, key).Err()
 }
 
-// CheckRateLimit checks if an IP has exceeded the rate limit
-func CheckRateLimit(ip, endpoint string, limit int, window time.Duration) (bool, error) {
-	key := fmt.Sprintf("%s%s:%s", RateLimitKeyPrefix, ip, endpoint)
+// CheckRateLimit checks if rate limit is exceeded
+func CheckRateLimit(key string, limit int, window int) (bool, error) {
+	fullKey := RateLimitKeyPrefix + key
 	
-	// Get current count
-	count, err := Client.Get(ctx, key).Int()
-	if err == redis.Nil {
-		// First request, set counter to 1 with expiration
-		err = Client.Set(ctx, key, 1, window).Err()
-		return true, err
-	}
+	count, err := Client.Incr(ctx, fullKey).Result()
 	if err != nil {
 		return false, err
 	}
-
-	// Check if limit exceeded
-	if count >= limit {
-		return false, nil
-	}
-
-	// Increment counter
-	Client.Incr(ctx, key)
-	return true, nil
-}
-
-// GetRateLimitInfo returns current rate limit status
-func GetRateLimitInfo(ip, endpoint string) (int, error) {
-	key := fmt.Sprintf("%s%s:%s", RateLimitKeyPrefix, ip, endpoint)
 	
-	count, err := Client.Get(ctx, key).Int()
-	if err == redis.Nil {
-		return 0, nil
+	if count == 1 {
+		Client.Expire(ctx, fullKey, time.Duration(window)*time.Second)
 	}
-	return count, err
+	
+	return count <= int64(limit), nil
 }
 
-// CacheURLWithData is a helper to cache URL data from database model
-func CacheURLWithData(shortCode string, url *models.URL, ttl time.Duration) error {
-	cachedURL := &models.CachedURL{
-		OriginalURL: url.OriginalURL,
-		ClickCount:  url.ClickCount,
-		ExpiresAt:   url.ExpiresAt,
-		IsActive:    url.IsActive,
-	}
-	return SetCachedURL(shortCode, cachedURL, ttl)
-}
-
-// InvalidateURLCache removes all cache entries for a URL
-func InvalidateURLCache(shortCode string) error {
-	if err := DeleteCachedURL(shortCode); err != nil {
-		return err
-	}
-	return DeleteClickCount(shortCode)
-}
-
-// GetAllClickCounters retrieves all click counters (for batch flushing)
+// GetAllClickCounters gets all click counters using SCAN (non-blocking)
 func GetAllClickCounters() (map[string]int64, error) {
 	pattern := ClickCounterKeyPrefix + "*"
-	
-	keys, err := Client.Keys(ctx, pattern).Result()
-	if err != nil {
-		return nil, err
-	}
-
 	counters := make(map[string]int64)
 	
-	for _, key := range keys {
-		val, err := Client.Get(ctx, key).Result()
+	// Use SCAN instead of KEYS for non-blocking iteration
+	var cursor uint64
+	for {
+		var keys []string
+		var err error
+		
+		// SCAN returns cursor and keys in batches (non-blocking)
+		keys, cursor, err = Client.Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
-			continue
+			return nil, err
 		}
 		
-		var count int64
-		fmt.Sscanf(val, "%d", &count)
+		// Process this batch of keys
+		for _, key := range keys {
+			val, err := Client.Get(ctx, key).Result()
+			if err != nil {
+				continue
+			}
+			var count int64
+			fmt.Sscanf(val, "%d", &count)
+			shortCode := key[len(ClickCounterKeyPrefix):]
+			counters[shortCode] = count
+		}
 		
-		// Extract short code from key
-		shortCode := key[len(ClickCounterKeyPrefix):]
-		counters[shortCode] = count
+		// cursor == 0 means iteration complete
+		if cursor == 0 {
+			break
+		}
 	}
-
+	
 	return counters, nil
 }
 
-// FlushClickCounters deletes all click counter keys
-func FlushClickCounters() error {
-	pattern := ClickCounterKeyPrefix + "*"
+// FlushClickCounters deletes all click counters
+func FlushClickCounters(shortCodes []string) error {
+	if len(shortCodes) == 0 {
+		return nil
+	}
 	
-	keys, err := Client.Keys(ctx, pattern).Result()
-	if err != nil {
-		return err
+	keys := make([]string, len(shortCodes))
+	for i, code := range shortCodes {
+		keys[i] = ClickCounterKeyPrefix + code
 	}
-
-	if len(keys) > 0 {
-		return Client.Del(ctx, keys...).Err()
-	}
-
-	return nil
-}
-
-// Health check for Redis
-func HealthCheck() error {
-	_, err := Client.Ping(ctx).Result()
-	return err
-}
-
-// GetCacheStats returns basic cache statistics
-func GetCacheStats() (map[string]interface{}, error) {
-	info, err := Client.Info(ctx, "stats").Result()
-	if err != nil {
-		return nil, err
-	}
-
-	dbSize, err := Client.DBSize(ctx).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	stats := map[string]interface{}{
-		"db_size": dbSize,
-		"info":    info,
-	}
-
-	return stats, nil
+	
+	return Client.Del(ctx, keys...).Err()
 }

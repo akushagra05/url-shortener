@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/url-shortener/cache"
-	"github.com/yourusername/url-shortener/models"
+	"github.com/yourusername/url-shortener/internal/models"
 )
 
 // RateLimiter middleware limits requests based on IP and endpoint
@@ -14,8 +14,9 @@ func RateLimiter(limit int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		endpoint := c.FullPath()
+		key := ip + ":" + endpoint
 
-		allowed, err := cache.CheckRateLimit(ip, endpoint, limit, window)
+		allowed, err := cache.CheckRateLimit(key, limit, int(window.Seconds()))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.APIResponse{
 				Success: false,

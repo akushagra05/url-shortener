@@ -4,6 +4,8 @@ import axios from 'axios'
 const URLShortener = ({ onURLCreated }) => {
   const [url, setUrl] = useState('')
   const [customAlias, setCustomAlias] = useState('')
+  const [expiryType, setExpiryType] = useState('none') // 'none', 'duration', 'datetime'
+  const [expiresIn, setExpiresIn] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
@@ -25,7 +27,9 @@ const URLShortener = ({ onURLCreated }) => {
         payload.custom_alias = customAlias.trim()
       }
 
-      if (expiresAt) {
+      if (expiryType === 'duration' && expiresIn) {
+        payload.expires_in = expiresIn
+      } else if (expiryType === 'datetime' && expiresAt) {
         payload.expires_at = new Date(expiresAt).toISOString()
       }
 
@@ -41,6 +45,8 @@ const URLShortener = ({ onURLCreated }) => {
         
         setUrl('')
         setCustomAlias('')
+        setExpiryType('none')
+        setExpiresIn('')
         setExpiresAt('')
         if (onURLCreated) {
           onURLCreated()
@@ -103,19 +109,79 @@ const URLShortener = ({ onURLCreated }) => {
           </p>
         </div>
 
-        {/* Expiration Date */}
+        {/* Expiration Options */}
         <div>
-          <label htmlFor="expires" className="block text-sm font-medium text-gray-700 mb-2">
-            Expiration date (optional)
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Expiration (optional)
           </label>
-          <input
-            id="expires"
-            type="datetime-local"
-            value={expiresAt}
-            onChange={(e) => setExpiresAt(e.target.value)}
-            className="input-field"
-            min={new Date().toISOString().slice(0, 16)}
-          />
+          
+          {/* Expiry Type Selector */}
+          <div className="flex flex-wrap gap-4 mb-3">
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="expiry"
+                value="none"
+                checked={expiryType === 'none'}
+                onChange={(e) => setExpiryType(e.target.value)}
+                className="w-4 h-4 text-primary-600 mr-2"
+              />
+              <span className="text-sm text-gray-700">No expiration</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="expiry"
+                value="duration"
+                checked={expiryType === 'duration'}
+                onChange={(e) => setExpiryType(e.target.value)}
+                className="w-4 h-4 text-primary-600 mr-2"
+              />
+              <span className="text-sm text-gray-700">Duration</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="expiry"
+                value="datetime"
+                checked={expiryType === 'datetime'}
+                onChange={(e) => setExpiryType(e.target.value)}
+                className="w-4 h-4 text-primary-600 mr-2"
+              />
+              <span className="text-sm text-gray-700">Specific date</span>
+            </label>
+          </div>
+
+          {/* Duration Input */}
+          {expiryType === 'duration' && (
+            <div>
+              <select
+                value={expiresIn}
+                onChange={(e) => setExpiresIn(e.target.value)}
+                className="input-field"
+              >
+                <option value="">Select duration</option>
+                <option value="5m">5 minutes</option>
+                <option value="30m">30 minutes</option>
+                <option value="1h">1 hour</option>
+                <option value="6h">6 hours</option>
+                <option value="24h">24 hours</option>
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+              </select>
+            </div>
+          )}
+
+          {/* DateTime Input */}
+          {expiryType === 'datetime' && (
+            <input
+              type="datetime-local"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              className="input-field"
+              min={new Date().toISOString().slice(0, 16)}
+            />
+          )}
         </div>
 
         {/* Submit Button */}
