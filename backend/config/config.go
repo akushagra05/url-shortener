@@ -2,8 +2,10 @@ package config
 
 import (
 	"log"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -66,25 +68,19 @@ func Load() *Config {
 		log.Println("No .env file found, using environment variables")
 	}
 
+	// Parse DATABASE_URL if provided (Render format)
+	dbConfig := parseDatabaseURL()
+	
+	// Parse REDIS_URL if provided (Render format)
+	redisConfig := parseRedisURL()
+
 	return &Config{
 		Server: ServerConfig{
-			Port:    getEnv("SERVER_PORT", "8080"),
+			Port:    getEnv("PORT", getEnv("SERVER_PORT", "8080")),
 			GinMode: getEnv("GIN_MODE", "debug"),
 		},
-		Database: DatabaseConfig{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "5432"),
-			User:     getEnv("DB_USER", "postgres"),
-			Password: getEnv("DB_PASSWORD", "postgres"),
-			DBName:   getEnv("DB_NAME", "url_shortener"),
-			SSLMode:  getEnv("DB_SSLMODE", "disable"),
-		},
-		Redis: RedisConfig{
-			Host:     getEnv("REDIS_HOST", "localhost"),
-			Port:     getEnv("REDIS_PORT", "6379"),
-			Password: getEnv("REDIS_PASSWORD", ""),
-			DB:       getEnvAsInt("REDIS_DB", 0),
-		},
+		Database: dbConfig,
+		Redis: redisConfig,
 		Snowflake: SnowflakeConfig{
 			MachineID:      getEnvAsInt64("MACHINE_ID", 1),
 			EpochTimestamp: getEnvAsInt64("EPOCH_TIMESTAMP", 1704067200000), // 2024-01-01
@@ -139,4 +135,79 @@ func (c *Config) GetDSN() string {
 
 func (c *Config) GetRedisAddr() string {
 	return c.Redis.Host + ":" + c.Redis.Port
+}
+
+// parseDatabaseURL parses DATABASE_URL (Render format) or falls back to individual env vars
+func parseDatabaseURL() DatabaseConfig {
+	databaseURL := os.Getenv("DATABASE_URL")
+	
+	if databaseURL != "" {
+		// Parse postgres://user:password@host:port/dbname?sslmode=require
+		u, err := url.Parse(databaseURL)
+		if err == nil && u.Scheme == "postgres" {
+			password, _ := u.User.Password()
+			host := u.Hostname()
+			port := u.Port()
+			if port == "" {
+				port = "5432"
+			}
+			dbName := strings.TrimPrefix(u.Path, "/")
+			sslMode := "require"
+			if q := u.Query().Get("sslmode"); q != "" {
+				sslMode = q
+			}
+			
+			return DatabaseConfig{
+				Host:     host,
+				Port:     port,
+				User:     u.User.Username(),
+				Password: password,
+				DBName:   dbName,
+				SSLMode:  sslMode,
+			}
+		}
+	}
+	
+	// Fallback to individual environment variables
+	return DatabaseConfig{
+		Host:     getEnv("DB_HOST", "localhost"),
+		Port:     getEnv("DB_PORT", "5432"),
+		User:     getEnv("DB_USER", "postgres"),
+		Password: getEnv("DB_PASSWORD", "postgres"),
+		DBName:   getEnv("DB_NAME", "url_shortener"),
+		SSLMode:  getEnv("DB_SSLMODE", "disable"),
+	}
+}
+
+// parseRedisURL parses REDIS_URL (Render format) or falls back to individual env vars
+func parseRedisURL() RedisConfig {
+	redisURL := os.Getenv("REDIS_URL")
+	
+	if redisURL != "" {
+		// Parse redis://default:password@host:port
+		u, err := url.Parse(redisURL)
+		if err == nil && (u.Scheme == "redis" || u.Scheme == "rediss") {
+			password, _ := u.User.Password()
+			host := u.Hostname()
+			port := u.Port()
+			if port == "" {
+				port = "6379"
+			}
+			
+			return RedisConfig{
+				Host:     host,
+				Port:     port,
+				Password: password,
+				DB:       0,
+			}
+		}
+	}
+	
+	// Fallback to individual environment variables
+	return RedisConfig{
+		Host:     getEnv("REDIS_HOST", "localhost"),
+		Port:     getEnv("REDIS_PORT", "6379"),
+		Password: getEnv("REDIS_PASSWORD", ""),
+		DB:       getEnvAsInt("REDIS_DB", 0),
+	}
 }
