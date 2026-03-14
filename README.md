@@ -1,6 +1,4 @@
 
-<div align="center">
-
 # 🔗 URL Shortener
 
 ### Production-Ready Link Shortening Service
@@ -12,9 +10,7 @@
 
 **Scalable • Fast • Reliable**
 
-[View Demo](#) • [Documentation](docs/) • [Report Bug](https://github.com/akushagra05/url-shortener/issues)
-
-</div>
+[Documentation](docs/) • [Report Bug](https://github.com/akushagra05/url-shortener/issues)
 
 ---
 
@@ -61,7 +57,7 @@ docker-compose up -d
 
 ## 🏗️ System Architecture
 
-<div align="center">
+
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -97,7 +93,7 @@ docker-compose up -d
        └────────────────┘  └────────────────┘
 ```
 
-</div>
+
 
 ### 💡 Architecture Highlights
 
@@ -140,7 +136,7 @@ Content-Type: application/json
 
 ## ⚡ Performance Metrics
 
-<div align="center">
+
 
 | Metric | Target | Achieved |
 |:------:|:------:|:--------:|
@@ -150,13 +146,13 @@ Content-Type: application/json
 | **Throughput** | 10K req/s | ✅ 12K req/s |
 | **Uptime** | 99.9% | 🎯 Goal |
 
-</div>
+
 
 ---
 
 ## 🛠️ Tech Stack
 
-<div align="center">
+
 
 ### Backend
 ![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go)
@@ -175,7 +171,7 @@ Content-Type: application/json
 ### DevOps
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker)
 
-</div>
+
 
 ---
 
@@ -260,16 +256,8 @@ url-shortener/
 
 ## 👤 Author
 
-**Built for Senior Backend Engineer Interview**
-
 [Kushagra Agrawal](https://github.com/akushagra05)
 
----
 
-<div align="center">
 
-### ⭐ Star this repo if you find it helpful!
 
-**Made with ❤️ using Go, React, PostgreSQL & Redis**
-
-</div>
