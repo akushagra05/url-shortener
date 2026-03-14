@@ -23,8 +23,8 @@ WORKDIR /root/
 # Copy the binary from builder
 COPY --from=builder /app/main .
 
-# Copy .env.example as reference (user should mount their own .env)
-COPY --from=builder /app/.env.example .
+# Copy production env file as .env
+COPY --from=builder /app/.env.production .env
 
 EXPOSE 8080
 
